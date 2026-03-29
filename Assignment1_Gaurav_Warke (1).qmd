@@ -1,0 +1,163 @@
+---
+title: "Customer Marketing Analysis Report"
+author: "Gaurav Warke"
+format: 
+  pdf: default
+  html:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+# Loading Libraries
+
+```{r}
+# Load libraries
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+```
+
+# **Introduction**
+
+- Businesses invest heavily in marketing to acquire customers and drive revenue.
+
+- This report analyzes customer acquisition data to understand marketing effectiveness across customer segments.
+
+- Understanding these patterns helps optimize marketing spend allocation.
+
+- The analysis uses real customer data from 2024-2026 to provide actionable insights.
+
+# **Research Question**
+
+## Q)[How does marketing spend effectiveness (purchase amount per dollar spent) vary across customer segments (Consumer, SMB, Enterprise)]{.underline}?
+
+This question examines ROI differences between segments to guide budget allocation. Higher effectiveness segments should receive priority marketing investment. The analysis uses purchase-to-spend ratios and visualization of key metrics.
+
+# **Dataset Introduction**
+
+This dataset tracks customer acquisition metrics from 2024-2026 across three segments: Consumer, SMB, and Enterprise. It records signup dates, marketing spend, website visits, purchase amounts, and customer notes for 150 customers. The data shows varied marketing outcomes with missing values in dates and purchases indicating incomplete tracking.
+
+**Data cleaning process:** Standardized multiple date formats using lubridate functions, converted character numeric columns to proper types, removed fully incomplete rows, and eliminated duplicates while preserving data integrity.
+
+# Reading and Filtering Dataset
+
+```{r load-and-clean}
+# Load data
+df_raw <- read_csv(here::here("data/36782122_Gaurav_Warke.csv"))
+
+# 1.Remove the 'notes' column (115/150 values missing — not useful)
+# 2.Drop rows with missing purchase_amount (18 rows) for ROI-related analyses
+# 3. Convert signup_date to Date type
+# 4. Convert segment to a factor with ordered levels: Consumer, SMB, Enterprise
+# 5. Compute marketing effectiveness as purchase_amount / marketing_spend (ROI ratio)
+# 6. Exclude rows where marketing_spend is zero to avoid division by zero
+
+df <- df_raw |>
+  select(-notes) |>
+  mutate(
+    signup_date = as.Date(signup_date),
+    segment     = factor(segment, levels = c("Consumer", "SMB", "Enterprise"))
+  )
+
+df_clean <- df |>
+  drop_na(purchase_amount) |>
+  filter(marketing_spend > 0) |>
+  mutate(effectiveness = purchase_amount / marketing_spend)
+```
+
+## Dataset Introduction
+
+This dataset records customer-level marketing and purchasing behaviour across three business segments: Consumer, SMB (Small-to-Medium Business), and Enterprise.
+
+Each observation represents a single customer and includes the marketing dollars spent to engage them, the number of site visits they made, and their total purchase amount.
+
+The central research question is: **How does marketing spend effectiveness — measured as purchase amount per dollar of marketing spend — vary across customer segments?**
+
+This question is motivated by the need to guide budget allocation decisions, since segments with a higher return on marketing investment should receive priority funding.
+
+The analysis derives a per-customer ROI ratio and compares its distribution and drivers across the three segments.
+
+The dataset was cleaned by removing the near-empty `notes` column, converting `signup_date` to a proper date type, and setting `segment` as an ordered factor. Rows missing `purchase_amount` were excluded from all analyses, and `effectiveness` (purchase amount ÷ marketing spend) was computed as the key derived metric.
+
+## Dataset Description
+
+```{r dataset-size}
+#| include: false
+nrow(df)
+ncol(df)
+```
+
+```{r}
+#| include: false
+str(df)
+```
+
+The cleaned data set contains `r nrow(df)`observations and `r ncol(df)`variables. The variables are: `customer_id` , `signup_date` , `marketing_spend`, `visits` , `purchase_amount` , and `segment` .The character-based customer identifier is the customer_id, a signup date(signup_date with some missing values, numeric fields for marketing spendmarketing_spend), number of visits(visits), and purchase amount(purchase amounts(which also has some missing values), and a three-level categorical segment variable(segment) (Consumer, SMB, and a third unlisted level).
+
+```{r summary-table}
+#| tbl-cap: "Mean marketing spend effectiveness (purchase amount per dollar spent) and supporting metrics by customer segment.Enterprise customers return the highest average purchase per dollar invested."
+#| warning: false 
+df_clean|>
+  group_by(segment) |>
+  summarise(N = n(),
+    `Mean Marketing Spend ` = round(mean(marketing_spend), 2),
+    `Mean Purchase Amount ` = round(mean(purchase_amount), 2),
+    `Mean Effectiveness ` = round(mean(effectiveness), 3)
+  ) |>
+  knitr::kable()
+```
+
+```{r summary-plot}
+#|fig-cap: "Figure 1:Distribution of customers across segments. Consumer is the largest group (90 customers), followed by SMB (45) and Enterprise (15). The small size of the Enterprise group means its effectiveness estimates should be interpreted with appropriate caution."
+#| fig-width: 6
+#| fig-height: 4
+df |>
+  count(segment) |>
+  ggplot(aes(x = segment, y = n, fill = segment)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = n), vjust = -0.4, size = 4) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x     = "Customer Segment",
+    y     = "Number of Customers",
+    title = "Customer Count by Segment"
+  ) +
+  theme_minimal()
+```
+
+# Results
+
+```{r fig-effectiveness-boxplot}
+#| fig-cap: "Figure 2:Distribution of marketing spend effectiveness (purchase amount per dollar spent) by customer segment. Enterprise customers show the highest median effectiveness, while Consumer customers have the lowest, suggesting Enterprise investment yields stronger returns per dollar."
+#| fig-width: 8
+#| fig-height: 6
+ggplot(df_clean, aes(x = segment, y = effectiveness, fill = segment)) +
+  geom_boxplot() +
+  ylim(0, 4) +
+  labs(x = "Segment", y = "Effectiveness",
+       title = "Marketing Spend Effectiveness by Segment") +
+  theme_minimal()
+```
+
+- @fig-effectiveness-boxplot directly addresses the research question by comparing the distribution of marketing spend effectiveness — purchase amount per dollar spent — across the three customer segments.
+
+```{r fig-effectiveness-visits}
+#| fig-cap: "Marketing spend effectiveness plotted against number of visits, faceted by segment. Across all segments, customers with more visits tend to show higher effectiveness, but the gradient is steepest for Enterprise customers, suggesting visit engagement translates more strongly to ROI in that segment."
+#| fig-width: 8
+#| fig-height: 5
+ggplot(df_clean, aes(x = visits, y = effectiveness)) +
+  geom_point(alpha = 0.55) +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~segment) +
+  labs(
+    x     = "Number of Visits",
+    y     = "Effectiveness (Purchase $ per Marketing $)",
+    title = "Effectiveness vs. Visits by Segment"
+  ) +
+  theme_minimal()
+```
+
+- @fig-effectiveness-visits a further dimension by showing how visit engagement relates to effectiveness within each segment: across all three groups there is a positive association between visits and effectiveness, but the slope is steepest for Enterprise customers, suggesting that when Enterprise customers visit repeatedly, the payoff in purchase value is substantially higher.
